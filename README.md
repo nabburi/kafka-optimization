@@ -7,8 +7,8 @@ This project optimizes a Kafka producer and consumer setup to achieve high throu
 - **Results**: Producer: 8,323.37 events/sec, Consumer: 19,075.10 events/sec (2 processes).
 - **Tools**: Kafka (direct), Kafka-Python (producer), confluent-kafka (consumer), VS Code venv.
 - **Files**:
-  - `producer.py`: Kafka producer (~8k events/sec).
-  - `consumer_opt_v11.py`: Optimized consumer (~19k events/sec).
+  - `ProducerOpt.py`: Kafka producer (~8k events/sec).
+  - `ConsumerOpt.py`: Optimized consumer (~19k events/sec).
   - `throughput_log.ipynb`: Jupyter log of runs.
 
 ## Setup Instructions
