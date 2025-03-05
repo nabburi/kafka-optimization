@@ -1,0 +1,23 @@
+[~Producer (~kafka-python)]
+  | ~20 ~Messages (~“test 1” to “test 20”, ~key: “User A”)
+  | ~Step 1: ~Init (~bootstrap_servers='localhost:9092') → ~Metadata (~ZooKeeper: ~10 ~partitions)
+  | ~Step 2: ~Batch (~16KB) → ~Partitioner (~Hash(~“User A”) % ~10 = ~partition 0)
+  v
+[~Fronting ~Kafka (~Broker ~API, ~localhost:9092)]
+  | ~Step 3: ~Receive (~TCP) → ~Route (~partition 0 ~leader)
+  v
+[~Broker (~localhost:9092)]
+  | ~Step 4: ~Store (~kafka-logs/test-topic-0)
+  |    ~Segment (~00000000000000000000.log): ~[0, “User A”, “test 1”] → ~[19, “User A”, “test 20”]
+  |    ~Index (~00000000000000000000.index): ~offset ~0-19
+  | ~Topic (~“test-topic”): ~10 ~partitions (~0-9, ~0 ~active)
+  | ~Partition (~0): ~20 ~messages (~offsets ~0-19)
+  v
+[~Consumer ~Group (~“my-group”, ~2 ~instances)]
+  | ~Step 5: ~Join (~ZooKeeper) → ~Coordinator (~partition 0 → ~Consumer 1)
+  v
+[~Consumer (~kafka-python)]
+  | ~Step 6: ~Poll (~partition 0, ~offsets ~0-19) → ~Buffer (~memory: ~20 ~messages)
+  | ~Consumer 1: ~Reads ~“test 1” to “test 20” (~prints)
+  | ~Consumer 2: ~Idle (~no ~partitions)
+  | ~Step 7: ~Commit (~offset ~19 → ~__consumer_offsets)
