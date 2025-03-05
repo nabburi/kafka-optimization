@@ -22,18 +22,18 @@ This project optimizes a Kafka producer and consumer setup to achieve high throu
 1. **Clone the Repo**:
    git clone https://github.com/<your-username>/kafka-optimization.git
    cd kafka-optimization
-2. Set Up Virtual Environment:
+2. **Set Up Virtual Environment**:
    python -m venv venv
    source venv/bin/activate  # Mac/Linux
    venv\Scripts\activate     # Windows
-3. Install Dependencies:
+3. **Install Dependencies**:
    pip install kafka-python confluent-kafka
-4. Install Kafka:
+4. **Install Kafka**:
    Download Kafka: Apache Kafka (e.g., 3.6.1).
    Extract to ~/kafka.
    Start Zookeeper: ~/kafka/bin/zookeeper-server-start.sh ~/kafka/config/zookeeper.properties
    Start Kafka: ~/kafka/bin/kafka-server-start.sh ~/kafka/config/server.properties
-5. Run Producer:
+5. **Run Producer**:
    python ProducerOpt.py
-6. Run Consumer:
+6. **Run Consumer**:
    python ConsumerOpt.py
