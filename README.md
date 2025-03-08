@@ -11,7 +11,7 @@ This project optimizes a Kafka producer and consumer setup to achieve high throu
   - `ConsumerOpt.py`: Optimized consumer (~19k events/sec).
   - `throughput_log.ipynb`: Jupyter log of runs.
 
-## Setup Instructions
+## Setup Instructions For Single Broker Setup
 ### Prerequisites
 - Python 3.8+
 - Git

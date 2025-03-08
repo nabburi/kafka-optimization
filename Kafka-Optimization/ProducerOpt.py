@@ -9,7 +9,7 @@ producer = KafkaProducer(
 start_time = time.time()
 for i in range(10000):
     message = json.dumps({"id": i, "data": "test"})
-    producer.send('test-opt-2', value=message.encode('utf-8'))
+    producer.send('test-topic', value=message.encode('utf-8'))
 producer.flush()
 end_time = time.time()
-print(f"Producer time: {end_time - start_time:.2f}s, Throughput: {1000 / (end_time - start_time):.2f} events/sec")
+print(f"Producer time: {end_time - start_time:.2f}s, Throughput: {10000 / (end_time - start_time):.2f} events/sec")

@@ -1,0 +1,30 @@
+Kafka commands:
+
+Start zookeper:
+
+bin/zookeeper-server-start.sh config/zookeeper.properties
+
+start kafka:
+bin/kafka-server-start.sh config/server.properties
+
+list topics:
+bin/kafka-topics.sh --list --bootstrap-server localhost:9092
+
+
+create topic:
+bin/kafka-topics.sh --create --topic test-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+create topic with retention:
+bin/kafka-topics.sh --create --topic test-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1 --config retention.ms=604800000
+
+Prevent Future Deletes: 
+    • Edit config/server.properties (~2 min, Week 2 tweak): 
+        ◦ Add: delete.topic.enable=false—stops manual deletes (restart Kafka after).
+Run consumer:
+bin/kafka-console-consumer.sh --topic test-topic --from-beginning --bootstrap-server localhost:9092
+
+Run producer:
+bin/kafka-console-producer.sh --topic test-topic --bootstrap-server localhost:9092
+
+add more partitions to producer:
+bin/kafka-topics.sh --alter --topic test-topic --bootstrap-server localhost:9092 --partitions 10
