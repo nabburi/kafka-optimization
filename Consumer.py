@@ -3,7 +3,7 @@ from kafka import KafkaConsumer
 consumer = KafkaConsumer(
     'test-topic',
     bootstrap_servers='localhost:9092',
-    group_id='my-group',
+    group_id='test-group',
     auto_offset_reset='earliest',  # Ch. 3 reliability
     #enable_auto_commit=True  # Ch. 3 reliability
 )

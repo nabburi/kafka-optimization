@@ -21,5 +21,7 @@ docker exec -it kafka-docker_kafka-1_1 /usr/bin/kafka-consumer-groups --bootstra
 kafka-topics --bootstrap-server localhost:9092 --describe #Check the status of topics, partitions, and In-Sync Replicas (ISR)
 kafka-console-producer --broker-list localhost:9092 --topic test-topic #Run the following command to send a message to your topic:
 kafka-console-consumer --bootstrap-server localhost:9092 --topic test-topic --from-beginning #consume the message
-
+kafka-consumer-groups --bootstrap-server localhost:9092 --group test-group --reset-offsets --to-earliest --execute --topic test-topic #reset the offset
+kafka-consumer-groups --bootstrap-server localhost:9092 --group test-group --describe #describe the consumer group
+watch -n 1 "kafka-consumer-groups --bootstrap-server localhost:9092 --group test-group --describe" #watch the consumer group
 

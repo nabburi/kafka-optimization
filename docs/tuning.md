@@ -246,3 +246,87 @@ Tuned v11 (10,000 Messages, March 5 ~7:20 AM)
         Consumer: 10,000 / 0.52 = 19,230 events/sec (reported 19,075)—poll(timeout=0.005) = ~200 polls/sec—0.52s / 0.005s = ~104 polls—10,000 / 104 = ~96 messages/poll—Consumer 0: 5,000 / 0.52 = ~9,615; Consumer 1: ~9,615—total ~19k—2x v6’s 8k!
     Why: 2 consumers (~9.6k each) = parallel fetch—fetch.max.bytes=500MB + max.partition.fetch.bytes=10MB = ~96/poll (~1MB fits)—enable.auto.commit=False + offset reset = full 10k—confluent-kafka = C-speed gold (March 5 ~7:20 AM).
     Thought: v10’s glitch fixed—19k > 10k—target smashed—done (March 5 ~7:25 AM).
+
+
+**producer**
+Asynchronous Sends: You're already using flush(), which waits for the producer to send messages synchronously. However, calling flush() after every send may reduce throughput. Try reducing the number of flush() calls or remove it entirely to let the producer handle retries and batching efficiently.
+
+    Kafka producers work best when messages are sent asynchronously. By removing flush(), the producer can send multiple messages at once and batch them efficiently. If you remove it, Kafka will flush messages to brokers when it's optimal (e.g., when a batch is full).
+
+Compression: Consider using compression for the payload to improve throughput, especially if you're sending large messages. You can set the compression_type to gzip, snappy, or lz4 for the producer.
+
+**Compression**
+Compression at the Producer:
+Kafka producers can compress data before sending it to the broker, which reduces the amount of data transmitted over the network and stored on the broker's disk. 
+No Data Loss:
+The compression process is lossless, meaning that the original data is preserved and can be perfectly reconstructed by the consumer after decompression. 
+Benefits of Compression:
+
+    Reduced Bandwidth Usage: Smaller compressed messages mean less data is transferred over the network. 
+
+Improved Storage Efficiency: Compressed messages take up less space on the broker's storage. 
+Faster Transmission: Smaller messages can be transmitted faster, potentially improving throughput. 
+
+Consumer Decompression:
+The consumer reads the compressed messages from the broker and decompresses them before processing them. 
+Compression Types:
+Kafka supports various compression codecs, such as gzip, snappy, and LZ4. 
+Batching:
+Compression is often more effective when combined with batching, where multiple messages are grouped together before compression and transmission. 
+Latency Considerations:
+While compression can reduce network traffic and storage requirements, it also adds some latency to the producer (for compression) and the consumer (for decompression). 
+
+Batching: Kafka producers work best when messages are batched together. The producer can hold messages in memory before sending them in batches, which improves throughput. You can adjust the batch.size and linger.ms parameters to fine-tune this.
+
+Optimizing Kafka Configuration: You may want to increase the acks configuration to acks='all' (or acks=1 depending on your requirements). This ensures better data durability, but keep in mind it may impact throughput.
+
+**Consumer**
+Consumer Throughput (5201.72 events/sec):
+
+The consumer throughput is also below the target, which is contributing to the low overall throughput.
+Recommendations:
+
+    Consume in Parallel: You are using three consumers, but you're assigning each consumer to only one partition. Kafka performs best when each consumer is assigned to multiple partitions (if you have multiple partitions). If you only have three partitions, assign each consumer to multiple partitions.
+
+    consumer.assign([TopicPartition('test-topic-1', partition) for partition in range(3)])
+
+    Consumer Fetch Size: You have set a large fetch.max.bytes (50MB) and max.partition.fetch.bytes (10MB). While these values can improve throughput, they might also introduce latency if the consumer isn't consuming quickly enough. Try reducing them to find an optimal balance. Also, experiment with reducing fetch.min.bytes to help the consumer fetch smaller chunks of data more frequently.
+
+    Parallelism and Multiprocessing: You are using the multiprocessing library to run consumers in parallel. Kafka consumers are usually more efficient when they are managed within threads rather than separate processes due to the overhead of process creation and context switching. However, if you're dealing with a large-scale deployment and multiple consumers per partition, consider managing multiple consumer threads per process.
+
+3. Kafka Cluster Configuration:
+
+Check if the Kafka cluster itself is configured correctly for high throughput:
+
+    Replication Factor: With a replication factor of 2, make sure your brokers are healthy and not under too much load. A replication factor of 3 could help in case of failures but might introduce some overhead.
+    Partitioning Strategy: With 3 brokers, you have 3 partitions, which is good for load balancing. If needed, you can experiment with increasing the number of partitions for better distribution of load.
+    ZooKeeper: If you're using ZooKeeper in your setup, ensure it's not becoming a bottleneck.
+
+4. Network Performance:
+
+Kafka performance can often be limited by network conditions, especially in a Dockerized environment. Make sure that the network setup between your Kafka brokers and consumers is optimized:
+
+    Kafka Listener Config: Ensure that the listeners in Kafka are bound correctly and accessible by your producers and consumers.
+    Docker Networking: If Kafka brokers are running in Docker containers, ensure you're using the correct network setup. localhost might not work across different containers; try using Docker's bridge or host networking.
+
+5. Monitoring and Diagnostics:
+
+    Kafka Metrics: Use tools like kafka-consumer-groups.sh to monitor consumer lag and other performance metrics.
+    Broker Logs: Check Kafka broker logs for any errors or performance warnings that might be limiting throughput.
+
+No Consumer Group: Without a consumer group (group.id), each consumer will fetch all the data from all partitions independently. In this case, all consumers will read the same data, which is not what you want when scaling consumers to handle different partitions (because Kafka will send the same messages to every consumer, causing data duplication and inefficient processing).
+
+With Consumer Group: If you assign consumers to a consumer group (group.id), Kafka will ensure that each consumer in the group gets assigned different partitions, and each partition is consumed by only one consumer in the group at a time. This avoids data duplication and allows you to scale the number of consumers to handle partitions in parallel.
+
+**final numbers**
+Prodcuser:
+Producer time: 0.52s, Throughput: 40454.74 events/sec
+
+Consumer: with 6 partitions and replication 2
+Consumer 3 fetched 47104 messages in 0.75s, Throughput: 62773.99 events/sec
+Consumer 2 fetched 47552 messages in 0.75s, Throughput: 63276.17 events/sec
+Consumer 0 fetched 47104 messages in 0.75s, Throughput: 62558.88 events/sec
+Consumer 5 fetched 47552 messages in 0.75s, Throughput: 63316.12 events/sec
+Consumer 1 fetched 48000 messages in 0.76s, Throughput: 63541.03 events/sec
+Consumer 4 fetched 48000 messages in 0.75s, Throughput: 63621.93 events/sec
+Total Consumer time: 0.77s, Throughput: 27423.83 events/sec
