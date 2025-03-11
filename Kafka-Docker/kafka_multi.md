@@ -77,3 +77,6 @@ Key Observations:
         Actual runtime is 2.19s, so ~1.49s is spent on fetching, processing, and overhead. This suggests the Kafka fetch operations are still relatively fast (~4,700 events/sec without the delay).
     Throughput Drop:
         Reducing fetch.max.bytes to 5MB (from 50MB) and removing max.poll.records likely forced smaller batches, spreading the work over more poll() calls and reducing the throughput from the previous unrealistic levels.
+
+
+===================================================================================

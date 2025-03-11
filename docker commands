@@ -10,8 +10,6 @@ find / -name "kafka-topics.sh" 2>/dev/null   # Hunt script (failed)
 ls /usr/bin/kafka* 2>/dev/null               # Found /usr/bin/kafka-topics
 netstat -tuln | grep 909                    # Check host ports (Linux/Mac)
 docker-compose down                        # Stop cluster
-docker exec -it kafka-docker_kafka-1_1 kafka-topics.sh --create ...  # Initial fail (wrong path)
-docker exec -it kafka-docker_kafka-1_1 /bin/kafka-topics.sh --create ...  # Wrong path
 docker exec -it kafka-docker_kafka-1_1 /usr/bin/kafka-topics --create --bootstrap-server localhost:9092 ...  # Timeout
 docker exec -it kafka-docker_kafka-1_1 /usr/bin/kafka-topics --create --bootstrap-server kafka-1:9092 ...  # Worked
 docker exec -it kafka-docker_kafka-1_1 /usr/bin/kafka-topics --list --bootstrap-server kafka-1:9092  # Verify topic
@@ -20,3 +18,8 @@ docker exec -it kafka-docker_kafka-1_1 /usr/bin/kafka-topics --list --bootstrap-
 docker run --rm confluentinc/cp-kafka:latest kafka-console-consumer --bootstrap-server localhost:19092 --topic test-topic --from-beginning
 docker run --rm confluentinc/cp-kafka:latest kafka-console-consumer --bootstrap-server localhost:19092 --topic test-topic --group test-group --from-beginning
 docker exec -it kafka-docker_kafka-1_1 /usr/bin/kafka-consumer-groups --bootstrap-server kafka-1:9092 --describe --group test-group
+kafka-topics --bootstrap-server localhost:9092 --describe #Check the status of topics, partitions, and In-Sync Replicas (ISR)
+kafka-console-producer --broker-list localhost:9092 --topic test-topic #Run the following command to send a message to your topic:
+kafka-console-consumer --bootstrap-server localhost:9092 --topic test-topic --from-beginning #consume the message
+
+

@@ -1,0 +1,58 @@
+{"topics": [
+  {
+    "topic": "__consumer_offsets",
+    "partitions": [
+      {"partition": 0}
+      ,{"partition": 1}
+      ,{"partition": 2}
+      ,{"partition": 3}
+      ,{"partition": 4}
+      ,{"partition": 5}
+      ,{"partition": 6}
+      ,{"partition": 7}
+      ,{"partition": 8}
+      ,{"partition": 9}
+      ,{"partition": 10}
+      ,{"partition": 11}
+      ,{"partition": 12}
+      ,{"partition": 13}
+      ,{"partition": 14}
+      ,{"partition": 15}
+      ,{"partition": 16}
+      ,{"partition": 17}
+      ,{"partition": 18}
+      ,{"partition": 19}
+      ,{"partition": 20}
+      ,{"partition": 21}
+      ,{"partition": 22}
+      ,{"partition": 23}
+      ,{"partition": 24}
+      ,{"partition": 25}
+      ,{"partition": 26}
+      ,{"partition": 27}
+      ,{"partition": 28}
+      ,{"partition": 29}
+      ,{"partition": 30}
+      ,{"partition": 31}
+      ,{"partition": 32}
+      ,{"partition": 33}
+      ,{"partition": 34}
+      ,{"partition": 35}
+      ,{"partition": 36}
+      ,{"partition": 37}
+      ,{"partition": 38}
+      ,{"partition": 39}
+      ,{"partition": 40}
+      ,{"partition": 41}
+      ,{"partition": 42}
+      ,{"partition": 43}
+      ,{"partition": 44}
+      ,{"partition": 45}
+      ,{"partition": 46}
+      ,{"partition": 47}
+      ,{"partition": 48}
+      ,{"partition": 49}
+    ]
+  }
+]
+}
