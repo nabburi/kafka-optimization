@@ -446,3 +446,5 @@ Let me know if you need further clarification!
 ====================================================================
 
 echo "min.insync.replicas=2" >> server.properties
+
+kafka-configs --bootstrap-server localhost:9092 --entity-type topics --entity-name test-topic --alter --add-config min.insync.replicas=1
