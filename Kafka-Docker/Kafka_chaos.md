@@ -113,6 +113,7 @@ For your test-topic, you have 3 partitions (which is controlled by your configur
 
 **NOT YET FIXED**
 **How to make a broker that got crashed and got back up to get in sync with all the consumer offset partitions and consumer offset ISR to update to elect the leaders if all the ISR is only pointing to non crashed ones?**
+**How to rebalance leader election**
 
 This could happen for several reasons: 
 
@@ -163,3 +164,69 @@ This could happen for several reasons:
 ---
 
 By identifying the root cause and addressing it, Broker 2 should eventually rejoin the ISR and stay in sync with the rest of the cluster. 
+
+**When taking two brokers down at a same time**
+
+In a Kafka cluster, each partition must have a leader that handles all reads and writes for that partition. If a partition does not have a leader, it cannot be read from or written to, which would cause issues for consumers and producers.
+
+In your case, since two partitions (Partition 0 and Partition 5) do not have a leader (Leader: none), this is not expected behavior, and the partitions are effectively unavailable for writes or reads until a leader is assigned.
+Why does this happen?
+
+    Leader election failure: When you killed two brokers simultaneously, Kafka tried to elect a new leader for the affected partitions. However, since there are only three brokers in total and two were down, Kafka could not successfully elect a leader for partitions 0 and 5 (because the required number of in-sync replicas or ISRs for these partitions were not available).
+
+    Replication Factor and ISRs: You have a replication factor of 2, which means that each partition has two replicas. If both brokers responsible for those partitions are down, the replicas will not be available to elect a new leader, leading to the situation you are seeing (Leader: none).
+
+What should happen:
+
+    Leader election process: Kafka will automatically attempt to reassign a leader if the current leader fails, based on the in-sync replicas (ISR). However, this is only possible if there are enough replicas in sync. If there aren't enough replicas in sync (due to brokers being down), Kafka won't be able to elect a leader for those partitions.
+
+    ISR (In-Sync Replicas): The ISR for each partition must contain at least one replica other than the leader. If a partition's ISR is reduced to just one replica, then the partition cannot elect a leader.
+
+What you can do:
+
+    Bring the brokers back online: Once the two brokers are back online, Kafka should be able to elect new leaders for the affected partitions. This is the best solution as it will restore the partition availability.
+
+    Check ISR status: Use the kafka-topics --describe command or the kafka-consumer-groups --describe command to check the ISR status for your partitions. You will see the ISRs, and if any partition has only one replica in the ISR, it means that the other broker replica is unavailable.
+
+    Rebalance the cluster: If the partitions are still in an unhealthy state after the brokers are back online, you can trigger a rebalance of the cluster by running the following command:
+
+kafka-reassign-partitions --bootstrap-server localhost:9092 --execute --reassignment-json-file <json_file_with_reassignment>
+
+
+Investigate the logs: Check the broker logs (server.log) to see why the leader election failed. It might provide more insights into the issue.
+
+In this case, Broker 1 (the leader for partitions 1, 2, 3, and 4) is overburdened with being the leader for four out of the six partitions, while Broker 3 is only leading partitions 0 and 5. Ideally, Kafka should spread the leadership load more evenly across the available brokers.
+Why this happens:
+
+    Kafka's leader election algorithm attempts to assign the leader of each partition based on the replication factor, ISR, and broker availability.
+    Balanced leader election: In general, Kafka strives to balance the leadership load, but it prioritizes maintaining a consistent ISR (i.e., making sure that a partition's leader is always available with a sufficient number of replicas in sync).
+    After restarting brokers, Kafka may end up with unbalanced leader assignments if it doesn't get a chance to perform a full rebalance or if partitions are not reassigned based on the optimal distribution.
+================withoutLag=================================================
+Producer time: 0.57s, Throughput: 36658.82 events/sec
+Consumer 0 fetched 3500 messages in 0.62s, Throughput: 5612.48 events/sec
+Consumer 4 fetched 3500 messages in 0.62s, Throughput: 5628.52 events/sec
+Consumer 2 fetched 3500 messages in 0.62s, Throughput: 5615.80 events/sec
+Consumer 3 fetched 3500 messages in 0.62s, Throughput: 5618.00 events/sec
+Consumer 1 fetched 3500 messages in 0.62s, Throughput: 5605.96 events/sec
+Consumer 5 fetched 3500 messages in 0.62s, Throughput: 5620.18 events/sec
+Total Consumer time: 0.65s, Throughput: 32511.39 events/sec
+========================with lag of 100ms=================================
+Producer time: 11.54s, Throughput: 1819.32 events/sec
+Consumer 0 fetched 0 messages in 0.50s, Throughput: 0.00 events/sec
+Consumer 1 fetched 0 messages in 0.50s, Throughput: 0.00 events/sec
+Consumer 4 fetched 0 messages in 0.50s, Throughput: 0.00 events/sec
+Consumer 3 fetched 3500 messages in 0.82s, Throughput: 4256.89 events/sec
+Consumer 5 fetched 3500 messages in 0.82s, Throughput: 4260.75 events/sec
+Consumer 2 fetched 3500 messages in 0.82s, Throughput: 4249.33 events/sec
+Total Consumer time: 1.13s, Throughput: 18548.36 events/sec
+==========================================================================
+
+Replication and ISR Maintenance:
+
+    When you delete partition logs from a broker, Kafka doesn't immediately shrink the ISR for the affected partition because the broker is still actively communicating with the cluster and might still be holding onto the partition's state in its internal memory.
+    Kafka periodically checks the ISR and the health of replicas, but the process of shrinking ISR typically takes time and depends on the Kafka replication settings.
+
+ISR Shrinking Process:
+
+    Kafka checks the health of replicas through regular heartbeats and replica fetcher threads. If a replica is down or unreachable, it may be removed from the ISR. But this check doesn't happen immediately after deleting log files.
+    The broker where the partition logs were deleted might still be considered part of the ISR for some time, and Kafka will only shrink the ISR after the replica fails to join the replication process or after some time passes without replication.

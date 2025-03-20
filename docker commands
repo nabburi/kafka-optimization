@@ -10,9 +10,6 @@ find / -name "kafka-topics.sh" 2>/dev/null   # Hunt script (failed)
 ls /usr/bin/kafka* 2>/dev/null               # Found /usr/bin/kafka-topics
 netstat -tuln | grep 909                    # Check host ports (Linux/Mac)
 docker-compose down                        # Stop cluster
-docker exec -it kafka-docker_kafka-1_1 /usr/bin/kafka-topics --create --bootstrap-server localhost:9092 ...  # Timeout
-docker exec -it kafka-docker_kafka-1_1 /usr/bin/kafka-topics --create --bootstrap-server kafka-1:9092 ...  # Worked
-docker exec -it kafka-docker_kafka-1_1 /usr/bin/kafka-topics --list --bootstrap-server kafka-1:9092  # Verify topic
 docker exec -it kafka-docker_kafka-1_1 /usr/bin/kafka-topics --create --bootstrap-server kafka-1:9092 --replication-factor 2 --partitions 3 --topic test-topic
 docker exec -it kafka-docker_kafka-1_1 /usr/bin/kafka-topics --list --bootstrap-server kafka-1:9092  # Verify topic
 docker run --rm confluentinc/cp-kafka:latest kafka-console-consumer --bootstrap-server localhost:19092 --topic test-topic --from-beginning
@@ -24,4 +21,428 @@ kafka-console-consumer --bootstrap-server localhost:9092 --topic test-topic --fr
 kafka-consumer-groups --bootstrap-server localhost:9092 --group test-group --reset-offsets --to-earliest --execute --topic test-topic #reset the offset
 kafka-consumer-groups --bootstrap-server localhost:9092 --group test-group --describe #describe the consumer group
 watch -n 1 "kafka-consumer-groups --bootstrap-server localhost:9092 --group test-group --describe" #watch the consumer group
+#Inject Latency Using tc (Traffic Control): Use the tc command to add network delay on Broker
+docker exec -it kafka1 tc qdisc add dev eth0 root netem delay 100ms
+#root  user
+docker exec -u root -it kafka-docker_kafka-1_1 bash
+#delte topic
+kafka-topics --bootstrap-server localhost:9092 --delete --topic test_topic
+#as root user
+docker exec -it --user root kafka-docker_kafka-1_1 bash
+##to setup latnecy on docker##########################################################
+#Find the Docker network interface (likely docker0 or br-*):
 
+ip link show
+
+#Apply a delay on the host:
+
+sudo tc qdisc add dev docker0 root netem delay 100ms
+
+#Verify the delay:
+
+sudo tc qdisc show dev docker0
+# #Test the latency by pinging localhost or the container from the host:
+# ping -c 5 localhost
+# It looks like you've identified the Docker network interfaces:
+
+#     docker0: This is the default Docker bridge network.
+#     br-453d9ead1975 and br-32da916f683b: These are Docker bridge networks, which are likely associated with your running containers.
+
+# Since docker0 is up and active, we can apply the network delay to it on the host system.
+
+# Run the following command on your host machine to add a 100ms delay:
+
+sudo tc qdisc add dev docker0 root netem delay 100ms
+
+# To verify that the delay is applied, run:
+
+sudo tc qdisc show dev docker0
+
+# Expected output should show something like:
+
+qdisc netem 8001: root limit 1000 delay 100ms
+
+# You can test the latency by pinging localhost or the container from the host:
+
+ping -c 5 localhost
+
+# If you need to adjust the delay, just modify the value:
+
+sudo tc qdisc change dev docker0 root netem delay 200ms
+
+# To remove the delay:
+
+sudo tc qdisc del dev docker0 root
+
+
+If you're unable to apply tc directly inside the container, it's likely because Docker containers, by default, are restricted from using certain network features like traffic control (tc) directly. To work around this, you can apply the delay at the host level and ensure that it affects the Kafka container's network traffic.
+
+Here's a step-by-step approach to apply the delay from the host level and validate it:
+Steps to Apply Latency at the Host Level:
+
+    Identify the Docker Network Interface: From the previous output, it seems your Kafka container is using a custom Docker network (with 172.18.x.x subnet). You'll want to apply the latency to the interface that connects the container's network (likely docker0 or br-XXXXXXX).
+
+    First, list your network interfaces on the host to find the Docker bridge interface:
+
+ip link show
+
+Look for an interface that corresponds to Docker's bridge network, typically named docker0 or br-xxxxxx.
+
+Apply the Latency to the Docker Bridge (docker0): Once you've identified the bridge interface, apply the latency using the tc command on the host:
+
+sudo tc qdisc add dev docker0 root netem delay 100ms
+
+Note: Replace docker0 with the appropriate interface if it differs on your setup.
+
+Verify Latency: After applying the delay, you can verify it by pinging between the containers. For instance, if your Kafka containers are named kafka-1 and kafka-2, use:
+
+docker exec kafka-docker_kafka-1_1 ping kafka-docker_kafka-2_1
+
+You should see the latency reflected in the ping results (e.g., around 100ms). If you don't see the expected delay, ensure that the traffic is routed through docker0.
+
+Test the Impact: Once the latency is applied, run your Kafka consumer and producer scripts to test the impact of the added delay on throughput and lag. You should see a noticeable decrease in throughput and possible lag increase as the 100ms delay adds overhead to message processing.
+
+Remove the Latency (Optional): If you want to remove the applied delay later, use:
+
+    sudo tc qdisc del dev docker0 root
+
+Important Notes:
+
+    Container Networking: If your containers are using a custom network mode (e.g., host or overlay), you might need to apply the delay differently. Ensure that your traffic flows through docker0 or the appropriate bridge interface.
+    Ping on Host vs Container: If you ping from the host (ping localhost), you won't see the delay because loopback traffic doesn't go through Docker's network. Always test ping between containers or from inside a container to validate the delay.
+
+Let me know if this works for you!
+You said:
+if applying on docker0 but kafka-1 is using kafka-docker-default nerwork and it's not effective
+ChatGPT said:
+
+If Kafka is using a different Docker network (e.g., kafka-docker-default), applying tc to docker0 will not affect the container traffic. You'll need to apply the traffic control to the correct Docker network interface that the Kafka container is using.
+
+Here's how to apply latency in such cases:
+Steps to Apply Latency on a Custom Docker Network:
+
+    Identify the Network Interface: Since your container is using the kafka-docker-default network, you need to find out which network interface this Docker network corresponds to.
+
+    To do this, inspect the network:
+
+docker network inspect kafka-docker-default
+
+This will give you detailed information about the network, including the interface name on the host that Docker uses to communicate with the containers on that network.
+
+Apply the Latency on the Network Interface: From the output of the previous step, you'll see something like this for the network's bridge interface or veth interface:
+
+"Containers": {
+  "container-id": {
+    "Name": "kafka-1",
+    "IPv4Address": "172.18.x.x/16",
+    ...
+  }
+}
+
+The key part here is the veth interface that connects the container to the Docker network (usually named something like vethXXXXXX). You can find this interface name using:
+
+ip link show
+
+Look for an interface starting with veth, such as veth1234567, which is the link between your container and Docker's bridge network.
+
+Apply the Latency to the Correct Interface: Once you've identified the correct interface, apply the latency using the tc command:
+
+sudo tc qdisc add dev vethXXXXXXX root netem delay 100ms
+
+Replace vethXXXXXXX with the actual interface name you found in the previous step.
+
+Verify the Latency: After applying the latency, you can verify it by running a ping from one Kafka container to another:
+
+docker exec kafka-docker_kafka-1_1 ping kafka-docker_kafka-2_1
+
+You should see the added 100ms latency in the ping times.
+
+Test Kafka Throughput and Lag: With the delay applied, test the Kafka throughput and consumer lag to see the effect. Run your Kafka producer and consumer scripts to measure any slowdown in throughput or increased lag.
+
+Remove the Latency (Optional): If you need to remove the delay later, run:
+
+    sudo tc qdisc del dev vethXXXXXXX root
+
+Troubleshooting:
+
+    If you're unsure about which interface to target, you can also try applying the delay to all network interfaces on the host and check if that affects Kafka traffic. You can apply it to docker0 or any custom interface found in the Docker network inspection.
+
+sudo tc qdisc add dev docker0 root netem delay 100ms
+
+Ping Validation: Remember that if you ping from the host's loopback (localhost), you won't see the effect of the delay. Always ping between containers or from within a container.
+
+To determine which veth interface corresponds to your specific container, you can follow these steps:
+Step 1: Check the Container's Network Information
+
+Run the following command to get details about the container's network:
+
+docker inspect <container_name_or_id> | grep "NetworkMode"
+
+This will tell you the network mode the container is using, and you can match the interface to the network in use.
+
+For example, if the container is using a bridge network, you'll need to look for the interface connected to that bridge.
+Step 2: Match the veth Interface to the Container
+
+The veth interfaces you see correspond to containers connected to a specific Docker bridge network. The interfaces are named in a way that shows the container-to-host link. You can correlate the interface based on the Docker container's ID or name. To do this, follow these steps:
+
+    Run the following command to identify the network connection of your Kafka container:
+
+docker inspect <container_name_or_id>
+
+Look for the NetworkSettings section in the output. You should see the IPAddress field (e.g., 172.18.0.5) under the kafka-docker-default network, which corresponds to the container's IP address.
+
+Match the container's IP with the veth interfaces:
+
+In your case, if the container's IP is 172.18.0.5, find the veth interface in the host system that is associated with this IP. The veth interfaces are usually created in pairs, one on the container side and one on the host side. The container's side will have the link to netnsid, indicating the container's network namespace.
+
+Identify the matching veth interface on the host side:
+
+For example, if your container has the IP 172.18.0.5, check the output of:
+
+    docker network inspect kafka-docker-default
+
+    This should give you information about the network, including the connected containers and their IPs. From here, match the container’s IP with the associated veth interface on the host.
+
+Step 3: Apply Latency to the Correct Interface
+
+Once you've identified the correct veth interface, you can apply the latency using tc:
+
+sudo tc qdisc add dev vethXXXXXXX root netem delay 100ms
+
+Replace vethXXXXXXX with the correct interface name, and verify it with ping as described earlier.
+To determine which veth interface corresponds to your Kafka container (kafka-docker_kafka-1_1), you can follow these steps based on the Docker network details you provided:
+Step 1: Match the IP Address
+
+From the output of docker inspect, the container kafka-docker_kafka-1_1 has the IP address 172.18.0.5/16. Now, let's match this IP to the corresponding veth interface.
+Step 2: Check veth Interfaces
+
+Based on your ip link show output, we see the following interfaces:
+
+    veth3d00bfc@if20: This is linked to network namespace 0.
+    vethed87a53@if22: Linked to network namespace 1.
+    vethfc750cc@if24: Linked to network namespace 2.
+    vethc03cc5f@if26: Linked to network namespace 3.
+
+The interface you are looking for should be one that connects to br-32da916f683b (as shown by the master tag in your output), which corresponds to the Docker bridge network kafka-docker_default. The interface with the correct network namespace (link-netnsid) will be tied to your Kafka container.
+Step 3: Verify the Container's Network Namespace
+
+Since your container kafka-docker_kafka-1_1 has the IP address 172.18.0.5, the veth interface associated with this container should have the network namespace netnsid 0 because Docker creates the network namespace when the container is started.
+
+From the output of ip link show, the interface veth3d00bfc@if20 has link-netnsid 0, meaning it corresponds to the kafka-docker_kafka-1_1 container.
+Step 4: Apply the tc Command
+
+Now, you can apply the latency configuration using the correct interface. Since veth3d00bfc@if20 corresponds to your container, you can apply the tc command as follows:
+
+sudo tc qdisc add dev veth3d00bfc root netem delay 100ms
+
+This will add a 100ms latency on the container’s network interface. You can verify the latency by using ping or other network diagnostic tools within the container.
+Step 5: Verify the Latency
+
+Once you've applied the tc command, you can verify it by executing a ping from inside the container:
+
+docker exec kafka-docker_kafka-1_1 ping -c 4 172.18.0.5
+
+This should show an increased response time if the latency is correctly applied.
+
+Let me know if you need further assistance!
+You said:
+veth3d00bfc@if20, how is it determined that this is the right one?
+ChatGPT said:
+
+The determination that veth3d00bfc@if20 is the correct interface for your Kafka container is based on the following reasoning:
+Key Details:
+
+    Network Namespace: Docker creates a separate network namespace for each container. Each container gets a virtual Ethernet device (veth pair) to connect to the Docker bridge network.
+
+    Network Namespace ID: Each veth interface is associated with a particular network namespace, indicated by the link-netnsid attribute. The network namespace ID (netnsid) tells you which container the interface belongs to.
+
+How We Determine the Right Interface:
+
+    From Docker Network Inspect: You have the following output from docker inspect for the network kafka-docker_default:
+        The container kafka-docker_kafka-1_1 has the IP 172.18.0.5/16.
+        The container's endpoint_id is 7e23d8a08bd5b5bbb10eecc15ed58886851aafec493504a29e4ad3d0b104eefd.
+
+    From ip link show: You see multiple veth interfaces with the master br-32da916f683b tag, which means these interfaces are connected to the Docker bridge br-32da916f683b, the default bridge for Docker containers in the kafka-docker_default network.
+
+    Link Network Namespace: Each veth interface is linked to a network namespace using link-netnsid. From your output, we see:
+        veth3d00bfc@if20 has link-netnsid 0, which means it is linked to the container with netnsid 0.
+        Your container kafka-docker_kafka-1_1 is assigned netnsid 0 (the first container in the Docker network), so the interface veth3d00bfc@if20 corresponds to this container.
+
+Why veth3d00bfc@if20:
+
+    Network Namespace ID: The link-netnsid 0 directly associates this interface with the container whose namespace has ID 0, which matches kafka-docker_kafka-1_1.
+    IP Address: The IP 172.18.0.5 matches the container's IP in the docker inspect output. The interface with the correct network namespace and IP address matches the one tied to the container.
+
+Therefore, veth3d00bfc@if20 is the interface tied to your Kafka container kafka-docker_kafka-1_1.
+Verification:
+
+To ensure you're applying the tc command to the right interface, you can check the IP of the container and match it with the one on the interface:
+
+docker exec kafka-docker_kafka-1_1 ip addr show eth0
+
+This will confirm that 172.18.0.5 is the container's assigned IP, matching the one associated with veth3d00bfc@if20.
+
+Let me know if this clears things up or if you need more details!
+You said:
+where to check what netnsid id for each contianer
+ChatGPT said:
+
+You can find the netnsid for each Docker container by using the docker network inspect command or by examining the veth interfaces directly. Here's how to find the netnsid for each container:
+Method 1: Using docker network inspect
+
+You can inspect a Docker network to see the container's network namespace ID (netnsid) by running:
+
+docker network inspect <network_name>
+
+For example, to inspect the kafka-docker_default network:
+
+docker network inspect kafka-docker_default
+
+In the output, look for the containers listed under the "Containers" section. Each container entry will have an "EndpointID", but Docker does not directly expose the netnsid in this output. However, it links containers to virtual interfaces (like veth) and their IP addresses.
+Method 2: Checking veth Interfaces and netnsid
+
+The netnsid is the identifier of the network namespace and is embedded in the veth interface link as link-netnsid. You can cross-reference the network namespaces using the following steps:
+
+    List all the network namespaces with:
+
+ls /var/run/docker/netns/
+
+Each file in this directory corresponds to a network namespace for a running container.
+
+If you want to match the netnsid from the output of ip link show with a container, look at the virtual Ethernet (veth) interfaces:
+
+Run ip link show to see interfaces and their link-netnsid.
+
+ip link show
+
+Check the link-netnsid field for each veth interface. For example:
+
+21: veth3d00bfc@if20: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-32da916f683b state UP mode DEFAULT group default
+    link/ether 32:a8:04:05:76:20 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+
+This means the veth3d00bfc@if20 interface is in network namespace ID 0, which corresponds to the first container in the Docker network (in this case, kafka-docker_kafka-1_1).
+
+Alternatively, you can use the docker inspect command to check the network namespace of the container:
+
+    docker inspect --format '{{.State.Pid}}' <container_name_or_id>
+
+    This will give you the process ID (PID) of the container. The network namespace is tied to this PID, and you can use it to inspect the network namespace.
+
+    To find out the netnsid, you can examine the /proc/<PID>/ns/net file and cross-check with the Docker network interface.
+
+Method 3: Directly Querying /var/run/docker/netns/
+
+Another way to find which container corresponds to which network namespace is to check the /var/run/docker/netns/ directory, where Docker stores the network namespaces for each container:
+
+    List the namespaces:
+
+ls /var/run/docker/netns/
+
+Each file in this directory corresponds to a container's network namespace. You can use nsenter to enter a container's network namespace and verify the IP configuration. For example, if the namespace file is kafka-docker_kafka-1_1:
+
+    sudo nsenter -t <PID> -n ip a
+
+    This allows you to examine the network interfaces directly inside the container's network namespace.
+
+Let me know if you need help with any of these steps!
+You said:
+how to know what each endpointid is linked to what interfaces
+ChatGPT said:
+
+To determine which container's network interface is linked to each EndpointID, you can use the following approach:
+Step 1: Inspect the Docker Network
+
+You can use the docker network inspect command to find the EndpointID and corresponding network interface for each container connected to the network. The EndpointID is a unique identifier for the container's network endpoint.
+
+docker network inspect <network_name>
+
+For example:
+
+docker network inspect kafka-docker_default
+
+This command will provide detailed information about all the containers connected to the specified network (kafka-docker_default in this case). The output will look like this:
+
+{
+    "Name": "kafka-docker_default",
+    "Id": "32da916f683bb4bceb5e085ecf6cc68fe476337f873745851b7dcdc3a39930f8",
+    "Scope": "local",
+    "Driver": "bridge",
+    "EnableIPv6": false,
+    "IPAM": {
+        "Driver": "default",
+        "Config": [
+            {
+                "Subnet": "172.18.0.0/16",
+                "Gateway": "172.18.0.1"
+            }
+        ]
+    },
+    "Containers": {
+        "227bf719e75906cf8eee1c9986bce860c680297d30f6e1d54acadba802113193": {
+            "Name": "kafka-docker_kafka-2_1",
+            "EndpointID": "6758c1e580f9e006b9fce9f421e992d4f274bca1350bd3211410a72bba88f91f",
+            "MacAddress": "02:42:ac:12:00:03",
+            "IPv4Address": "172.18.0.3/16",
+            "IPv6Address": ""
+        },
+        "243ad8dcc1a16309709db3a5f78c54cf11f1fde63b6a2385d976a112e54b99e2": {
+            "Name": "kafka-docker_kafka-1_1",
+            "EndpointID": "7e23d8a08bd5b5bbb10eecc15ed58886851aafec493504a29e4ad3d0b104eefd",
+            "MacAddress": "02:42:ac:12:00:05",
+            "IPv4Address": "172.18.0.5/16",
+            "IPv6Address": ""
+        },
+        ...
+    }
+}
+
+In this example:
+
+    EndpointID "6758c1e580f9e006b9fce9f421e992d4f274bca1350bd3211410a72bba88f91f" corresponds to the container kafka-docker_kafka-2_1 with IP 172.18.0.3/16.
+    EndpointID "7e23d8a08bd5b5bbb10eecc15ed58886851aafec493504a29
+
+ip link show
+
+Look for interfaces that are named veth*. These are the virtual interfaces created for each container.
+
+Once you have the list of veth interfaces, check the link-netnsid for each interface, which corresponds to the container's network namespace.
+
+For example:
+
+21: veth3d00bfc@if20: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-32da916f683b state UP mode DEFAULT group default
+    link/ether 32:a8:04:05:76:20 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+
+This tells you that the veth3d00bfc@if20 interface is associated with network namespace ID 0, which should correspond to a container (you can verify by cross-referencing the namespace ID).
+
+To match the veth interface with a container, you can use the docker inspect command to check the container's network namespace.
+
+First, find the PID of the container using:
+
+docker inspect --format '{{.State.Pid}}' <container_name_or_id>
+
+For example, to get the PID of kafka-docker_kafka-1_1:
+
+docker inspect --format '{{.State.Pid}}' kafka-docker_kafka-1_1
+
+This will return the PID of the container's main process. You can use this PID to match the network namespace by inspecting /proc/<PID>/ns/net.
+
+For example:
+
+    ls -l /proc/<PID>/ns/net
+
+    This will show you which network namespace the container is using. Once you have this information, you can cross-reference with the veth interfaces linked to that namespace.
+
+Step 3: Summary of the Link
+
+    The docker network inspect command gives you the EndpointID, which identifies the container's network endpoint.
+    You can use the veth interface and link-netnsid to cross-reference and identify which container network is linked to a specific interface.
+    The PID from docker inspect helps to link a container's network namespace to a specific interface.
+
+Let me know if you need further clarification!
+
+
+
+#######################################################################
+====================================================================
+
+echo "min.insync.replicas=2" >> server.properties

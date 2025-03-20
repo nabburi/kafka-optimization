@@ -6,16 +6,16 @@ MAX_EMPTY_POLLS = 5  # Stop after 5 empty polls
 
 def consume_messages(consumer_id, partition):
     conf = {
-        'bootstrap.servers': 'localhost:19092',
+        'bootstrap.servers': 'localhost:19092 ,localhost:19093,localhost:19094',
         'group.id': 'test-group',  
         'auto.offset.reset': 'earliest',
-        'enable.auto.commit': False,  
-        'fetch.max.bytes': 100000000,  # 100MB
-        'max.partition.fetch.bytes': 20000000,  # 20MB
-        'fetch.min.bytes': 1048576,  # 1MB
-        'socket.receive.buffer.bytes': 50000000,  # 50MB
-        'session.timeout.ms': 120000,  # Avoid unnecessary rebalances (120 sec)
-        'heartbeat.interval.ms': 40000,  # Reduce heartbeat overhead (40 sec)
+        'enable.auto.commit': True,  
+        #'fetch.max.bytes': 100000000,  # 100MB
+        #'max.partition.fetch.bytes': 20000000,  # 20MB
+        #'fetch.min.bytes': 1048576,  # 1MB
+        #'socket.receive.buffer.bytes': 50000000,  # 50MB
+        #'session.timeout.ms': 120000,  # Avoid unnecessary rebalances (120 sec)
+        #'heartbeat.interval.ms': 40000,  # Reduce heartbeat overhead (40 sec)
     }
 
     consumer = Consumer(conf)

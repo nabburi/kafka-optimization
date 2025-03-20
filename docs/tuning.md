@@ -330,3 +330,16 @@ Consumer 5 fetched 47552 messages in 0.75s, Throughput: 63316.12 events/sec
 Consumer 1 fetched 48000 messages in 0.76s, Throughput: 63541.03 events/sec
 Consumer 4 fetched 48000 messages in 0.75s, Throughput: 63621.93 events/sec
 Total Consumer time: 0.77s, Throughput: 27423.83 events/sec
+
+
+Manual Offset Commit Overhead:
+
+    Manual commits are slower, especially with large batches, because each commit requires an additional network round trip.
+
+Inefficient Polling Strategy:
+
+    My code waits longer (timeout=1.0), reducing the frequency of polls. Kafka performs best with small, fast polls.
+
+Batch Configuration Trade-offs:
+
+    Larger fetch sizes work best for high-latency networks but may delay message delivery in low-latency setups. The dynamic Kafka defaults often perform better unless there’s a clear bottleneck.

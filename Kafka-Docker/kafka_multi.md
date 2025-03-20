@@ -80,3 +80,6 @@ Key Observations:
 
 
 ===================================================================================
+enable. auto. commit : This setting enables auto-commit (the default), which means the consumer automatically commit offsets periodically at the interval set by auto.commit.interval.ms . The default interval is 5 seconds.
+
+after setting this to true, I was able to see consumer groups
